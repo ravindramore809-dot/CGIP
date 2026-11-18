@@ -89,22 +89,33 @@
 
 <script>
   var files = [
-    { name: "Exp1 CGIP", url: "https://github.com/user-attachments/files/35032095/Exp1.CGIP.pdf" },
-    { name: "Exp2 CGIP", url: "https://github.com/user-attachments/files/35032099/Exp2.CGIP.pdf" },
-    { name: "Exp3 CGIP", url: "https://github.com/user-attachments/files/35032096/Exp3.CGIP.pdf" },
-    { name: "Exp4 CGIP", url: "https://github.com/user-attachments/files/35032093/Exp4.CGIP.pdf" },
-    { name: "Exp5 CGIP", url: "https://github.com/user-attachments/files/35032101/Exp5.CGIP.pdf" },
-    { name: "Exp6 CGIP", url: "https://github.com/user-attachments/files/35032098/Exp6.CGIP.pdf" },
-    { name: "Exp7 CGIP", url: "https://github.com/user-attachments/files/35032097/Exp7.CGIP.pdf" },
-    { name: "Exp8 CGIP", url: "https://github.com/user-attachments/files/35032094/Exp8.CGIP.pdf" },
-    { name: "Exp9 CGIP", url: "https://github.com/user-attachments/files/35032100/Exp9.CGIP.pdf" },
-    { name: "Exp10 CGIP", url: "https://github.com/user-attachments/files/35032102/Exp10.CGIP.pdf" }
+    { name: "Exp1 CGIP", file: "Exp1 CGIP.pdf" },
+    { name: "Exp2 CGIP", file: "Exp2 CGIP.pdf" },
+    { name: "Exp3 CGIP", file: "Exp3 CGIP.pdf" },
+    { name: "Exp4 CGIP", file: "Exp4 CGIP.pdf" },
+    { name: "Exp5 CGIP", file: "Exp5 CGIP.pdf" },
+    { name: "Exp6 CGIP", file: "Exp6 CGIP.pdf" },
+    { name: "Exp7 CGIP", file: "Exp7 CGIP.pdf" },
+    { name: "Exp8 CGIP", file: "Exp8 CGIP.pdf" },
+    { name: "Exp9 CGIP", file: "Exp9 CGIP.pdf" },
+    { name: "Exp10 CGIP", file: "Exp10 CGIP.pdf" }
   ];
 
   var list = document.getElementById("list");
   var q = document.getElementById("q");
   var count = document.getElementById("count");
   var empty = document.getElementById("empty");
+
+  function fileUrl(file) {
+    return new URL(encodeURIComponent(file), location.href).href;
+  }
+  function viewLink(file) {
+    var direct = fileUrl(file);
+    if (/Android/i.test(navigator.userAgent)) {
+      return "https://docs.google.com/viewer?url=" + encodeURIComponent(direct);
+    }
+    return direct;
+  }
 
   function render() {
     var term = q.value.trim().toLowerCase();
@@ -116,7 +127,7 @@
       var li = document.createElement("li");
       var a = document.createElement("a");
       a.className = "item";
-      a.href = f.url;
+      a.href = viewLink(f.file);
       a.target = "_blank";
       a.rel = "noopener";
       var badge = document.createElement("span");
@@ -128,7 +139,7 @@
       n.textContent = f.name;
       var h = document.createElement("div");
       h.className = "hint";
-      h.textContent = "Tap to open";
+      h.textContent = "Tap to view";
       text.appendChild(n);
       text.appendChild(h);
       a.appendChild(badge);
