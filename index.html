@@ -39,10 +39,7 @@
   main { max-width: 640px; margin: 0 auto; padding: 28px 16px 48px; }
   h1 { font-size: 1.9rem; line-height: 1.15; margin: 0 0 4px; letter-spacing: -0.01em; }
   .sub { margin: 0 0 22px; color: var(--muted); }
-  .search {
-    position: sticky; top: 0; z-index: 2;
-    padding: 10px 0 12px; background: var(--bg);
-  }
+  .search { position: sticky; top: 0; z-index: 2; padding: 10px 0 12px; background: var(--bg); }
   .search input {
     width: 100%; font: inherit; font-size: 1.05rem;
     padding: 14px 16px; border-radius: 12px;
@@ -71,6 +68,28 @@
   .hint { font-size: 0.85rem; color: var(--muted); }
   .empty { padding: 28px 8px; text-align: center; color: var(--muted); }
   [hidden] { display: none !important; }
+
+  /* PDF viewer */
+  #viewer { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; background: #3b4350; }
+  .vbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; background: var(--surface); border-bottom: 1px solid var(--line);
+  }
+  .vbar button, .vbar a {
+    flex: none; font: inherit; font-size: 0.95rem; font-weight: 600;
+    min-height: 40px; min-width: 40px; padding: 0 12px;
+    border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink);
+    display: inline-grid; place-items: center; text-decoration: none; cursor: pointer;
+  }
+  .vbar button:focus-visible, .vbar a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  #vtitle { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #vscroll { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 8px; }
+  #vpages { width: max-content; min-width: 100%; }
+  .page { margin: 0 auto 10px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  .page canvas { display: block; }
+  #vmsg { color: #fff; text-align: center; padding: 24px 12px; margin: 0; }
+  #vmsg a { color: #fff; }
 </style>
 </head>
 <body>
@@ -87,6 +106,21 @@
   <p class="empty" id="empty" hidden>No PDF matches that search. Try a number like 3 or the word Exp.</p>
 </main>
 
+<div id="viewer" hidden role="dialog" aria-label="PDF viewer">
+  <div class="vbar">
+    <button id="vback" type="button" aria-label="Back to list">Back</button>
+    <span id="vtitle"></span>
+    <button id="zout" type="button" aria-label="Zoom out">&minus;</button>
+    <button id="zin" type="button" aria-label="Zoom in">+</button>
+    <a id="vdl" href="#" download>Save</a>
+  </div>
+  <div id="vscroll">
+    <p id="vmsg"></p>
+    <div id="vpages"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
   var files = [
     { name: "Exp1 CGIP", file: "Exp1 CGIP.pdf" },
@@ -109,13 +143,6 @@
   function fileUrl(file) {
     return new URL(encodeURIComponent(file), location.href).href;
   }
-  function viewLink(file) {
-    var direct = fileUrl(file);
-    if (/Android/i.test(navigator.userAgent)) {
-      return "https://docs.google.com/viewer?url=" + encodeURIComponent(direct);
-    }
-    return direct;
-  }
 
   function render() {
     var term = q.value.trim().toLowerCase();
@@ -127,9 +154,12 @@
       var li = document.createElement("li");
       var a = document.createElement("a");
       a.className = "item";
-      a.href = viewLink(f.file);
-      a.target = "_blank";
-      a.rel = "noopener";
+      a.href = fileUrl(f.file);
+      a.addEventListener("click", function (e) {
+        if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+        e.preventDefault();
+        openViewer(f);
+      });
       var badge = document.createElement("span");
       badge.className = "badge";
       badge.textContent = "PDF";
@@ -150,9 +180,118 @@
     count.textContent = "Showing " + shown.length + " of " + files.length;
     empty.hidden = shown.length !== 0;
   }
-
   q.addEventListener("input", render);
   render();
+
+  /* ---------- In-page PDF viewer (PDF.js) ---------- */
+  var viewer = document.getElementById("viewer");
+  var vscroll = document.getElementById("vscroll");
+  var vpages = document.getElementById("vpages");
+  var vmsg = document.getElementById("vmsg");
+  var vtitle = document.getElementById("vtitle");
+  var vdl = document.getElementById("vdl");
+  var pdfDoc = null, zoom = 1, token = 0, observer = null, current = null;
+
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+
+  function fallbackMessage(f) {
+    vmsg.innerHTML = "";
+    vmsg.appendChild(document.createTextNode("This PDF could not be shown here. "));
+    var a = document.createElement("a");
+    a.href = fileUrl(f.file);
+    a.textContent = "Open it directly";
+    vmsg.appendChild(a);
+    vmsg.appendChild(document.createTextNode("."));
+  }
+
+  function openViewer(f) {
+    current = f;
+    zoom = 1;
+    var my = ++token;
+    vtitle.textContent = f.name;
+    vdl.href = fileUrl(f.file);
+    vdl.setAttribute("download", f.file);
+    vpages.innerHTML = "";
+    vmsg.textContent = "Loading…";
+    viewer.hidden = false;
+    document.body.style.overflow = "hidden";
+    history.pushState({ v: 1 }, "");
+    if (!window.pdfjsLib) { fallbackMessage(f); return; }
+    pdfjsLib.getDocument(fileUrl(f.file)).promise.then(function (doc) {
+      if (my !== token) return;
+      pdfDoc = doc;
+      vmsg.textContent = "";
+      build();
+    }).catch(function () {
+      if (my === token) fallbackMessage(f);
+    });
+  }
+
+  function closeViewer() {
+    token++;
+    viewer.hidden = true;
+    document.body.style.overflow = "";
+    if (observer) observer.disconnect();
+    vpages.innerHTML = "";
+    if (pdfDoc) { pdfDoc.destroy(); pdfDoc = null; }
+  }
+
+  function build() {
+    if (!pdfDoc) return;
+    if (observer) observer.disconnect();
+    vpages.innerHTML = "";
+    var cssW = Math.round((vscroll.clientWidth - 16) * zoom);
+    var doc = pdfDoc, my = token;
+    observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting && !en.target.dataset.done) {
+          en.target.dataset.done = "1";
+          renderPage(doc, my, en.target, cssW);
+        }
+      });
+    }, { root: vscroll, rootMargin: "700px 0px" });
+    for (var i = 1; i <= doc.numPages; i++) {
+      var div = document.createElement("div");
+      div.className = "page";
+      div.dataset.n = i;
+      div.style.width = cssW + "px";
+      div.style.height = Math.round(cssW * 1.414) + "px";
+      vpages.appendChild(div);
+      observer.observe(div);
+    }
+  }
+
+  function renderPage(doc, my, div, cssW) {
+    doc.getPage(+div.dataset.n).then(function (page) {
+      if (my !== token) return;
+      var base = page.getViewport({ scale: 1 });
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      var vp = page.getViewport({ scale: (cssW / base.width) * dpr });
+      var canvas = document.createElement("canvas");
+      canvas.width = Math.floor(vp.width);
+      canvas.height = Math.floor(vp.height);
+      canvas.style.width = cssW + "px";
+      canvas.style.height = Math.round(vp.height / dpr) + "px";
+      div.style.height = canvas.style.height;
+      div.appendChild(canvas);
+      return page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+    }).catch(function () {});
+  }
+
+  document.getElementById("vback").addEventListener("click", function () { history.back(); });
+  window.addEventListener("popstate", function () { if (!viewer.hidden) closeViewer(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !viewer.hidden) history.back();
+  });
+  document.getElementById("zin").addEventListener("click", function () {
+    zoom = Math.min(3, +(zoom + 0.25).toFixed(2)); build();
+  });
+  document.getElementById("zout").addEventListener("click", function () {
+    zoom = Math.max(0.5, +(zoom - 0.25).toFixed(2)); build();
+  });
 </script>
 </body>
 </html>
