@@ -86,7 +86,10 @@
   #vtitle { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #vscroll { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 8px; }
   #vpages { width: max-content; min-width: 100%; }
-  .page { margin: 0 auto 10px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  .page { position: relative; margin: 0 auto 10px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  .textLayer { position: absolute; inset: 0; overflow: hidden; line-height: 1; text-size-adjust: none; -webkit-user-select: text; user-select: text; }
+  .textLayer span, .textLayer br { position: absolute; color: transparent; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+  .textLayer ::selection { background: rgba(11, 95, 217, 0.35); }
   .page canvas { display: block; }
   #vmsg { color: #fff; text-align: center; padding: 24px 12px; margin: 0; }
   #vmsg a { color: #fff; }
@@ -268,16 +271,35 @@
     doc.getPage(+div.dataset.n).then(function (page) {
       if (my !== token) return;
       var base = page.getViewport({ scale: 1 });
+      var cssScale = cssW / base.width;
       var dpr = Math.min(window.devicePixelRatio || 1, 2);
-      var vp = page.getViewport({ scale: (cssW / base.width) * dpr });
+      var vp = page.getViewport({ scale: cssScale * dpr });
+      var vpCss = page.getViewport({ scale: cssScale });
       var canvas = document.createElement("canvas");
       canvas.width = Math.floor(vp.width);
       canvas.height = Math.floor(vp.height);
       canvas.style.width = cssW + "px";
-      canvas.style.height = Math.round(vp.height / dpr) + "px";
+      canvas.style.height = Math.round(vpCss.height) + "px";
       div.style.height = canvas.style.height;
       div.appendChild(canvas);
-      return page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+      var drawn = page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+
+      /* invisible text on top of the picture so words can be selected and copied */
+      page.getTextContent().then(function (tc) {
+        if (my !== token || !pdfjsLib.renderTextLayer) return;
+        var layer = document.createElement("div");
+        layer.className = "textLayer";
+        layer.style.setProperty("--scale-factor", cssScale);
+        div.appendChild(layer);
+        pdfjsLib.renderTextLayer({
+          textContentSource: tc,
+          textContent: tc,
+          container: layer,
+          viewport: vpCss,
+          textDivs: []
+        });
+      }).catch(function () {});
+      return drawn;
     }).catch(function () {});
   }
 
