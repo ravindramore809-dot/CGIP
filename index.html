@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CGIP Library</title>
+<title>Study Library</title>
 <style>
   :root {
     --bg: #eef2f6;
@@ -66,6 +66,9 @@
   }
   .name { font-weight: 600; }
   .hint { font-size: 0.85rem; color: var(--muted); }
+  li.group { margin: 20px 2px 2px; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  li.group:first-child { margin-top: 4px; }
+  .pimg { display: block; margin: 0 auto 10px; max-width: none; height: auto; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
   .empty { padding: 28px 8px; text-align: center; color: var(--muted); }
   [hidden] { display: none !important; }
 
@@ -97,11 +100,11 @@
 </head>
 <body>
 <main>
-  <h1>CGIP Library</h1>
-  <p class="sub">Computer Graphics and Image Processing: experiment PDFs</p>
+  <h1>Study Library</h1>
+  <p class="sub">Practical files: CGIP and Power Systems</p>
 
   <div class="search">
-    <input id="q" type="search" placeholder="Search, e.g. Exp5" aria-label="Search PDFs" autocomplete="off">
+    <input id="q" type="search" placeholder="Search, e.g. Exp5 or PS 4th" aria-label="Search PDFs" autocomplete="off">
     <div class="count" id="count" aria-live="polite"></div>
   </div>
 
@@ -126,16 +129,20 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
   var files = [
-    { name: "Exp1 CGIP", file: "Exp1 CGIP.pdf" },
-    { name: "Exp2 CGIP", file: "Exp2 CGIP.pdf" },
-    { name: "Exp3 CGIP", file: "Exp3 CGIP.pdf" },
-    { name: "Exp4 CGIP", file: "Exp4 CGIP.pdf" },
-    { name: "Exp5 CGIP", file: "Exp5 CGIP.pdf" },
-    { name: "Exp6 CGIP", file: "Exp6 CGIP.pdf" },
-    { name: "Exp7 CGIP", file: "Exp7 CGIP.pdf" },
-    { name: "Exp8 CGIP", file: "Exp8 CGIP.pdf" },
-    { name: "Exp9 CGIP", file: "Exp9 CGIP.pdf" },
-    { name: "Exp10 CGIP", file: "Exp10 CGIP.pdf" }
+    { group: "CGIP", name: "Exp1 CGIP", file: "Exp1 CGIP.pdf" },
+    { group: "CGIP", name: "Exp2 CGIP", file: "Exp2 CGIP.pdf" },
+    { group: "CGIP", name: "Exp3 CGIP", file: "Exp3 CGIP.pdf" },
+    { group: "CGIP", name: "Exp4 CGIP", file: "Exp4 CGIP.pdf" },
+    { group: "CGIP", name: "Exp5 CGIP", file: "Exp5 CGIP.pdf" },
+    { group: "CGIP", name: "Exp6 CGIP", file: "Exp6 CGIP.pdf" },
+    { group: "CGIP", name: "Exp7 CGIP", file: "Exp7 CGIP.pdf" },
+    { group: "CGIP", name: "Exp8 CGIP", file: "Exp8 CGIP.pdf" },
+    { group: "CGIP", name: "Exp9 CGIP", file: "Exp9 CGIP.pdf" },
+    { group: "CGIP", name: "Exp10 CGIP", file: "Exp10 CGIP.pdf" },
+    { group: "Power Systems", name: "PS 2nd PR: Code", file: "PS_2nd_PR_CODE_.jpg" },
+    { group: "Power Systems", name: "PS 3rd PR: Code", file: "PS_3rd_PR_CODE.pdf" },
+    { group: "Power Systems", name: "PS 4th PR: Bus Admittance Matrix", file: "PS_4th_PR_BUS_ADMMITANCE_MATRIX.pdf" },
+    { group: "Power Systems", name: "PS 5th PR: Code", file: "PS_5th_PR_CODE.jpg" }
   ];
 
   var list = document.getElementById("list");
@@ -150,10 +157,18 @@
   function render() {
     var term = q.value.trim().toLowerCase();
     var shown = files.filter(function (f) {
-      return f.name.toLowerCase().indexOf(term) !== -1;
+      return (f.group + " " + f.name).toLowerCase().indexOf(term) !== -1;
     });
     list.innerHTML = "";
+    var lastGroup = "";
     shown.forEach(function (f) {
+      if (f.group !== lastGroup) {
+        lastGroup = f.group;
+        var gh = document.createElement("li");
+        gh.className = "group";
+        gh.textContent = f.group;
+        list.appendChild(gh);
+      }
       var li = document.createElement("li");
       var a = document.createElement("a");
       a.className = "item";
@@ -210,6 +225,20 @@
     vmsg.appendChild(document.createTextNode("."));
   }
 
+  function isImage(f) { return /\.(jpe?g|png|webp|gif)$/i.test(f.file); }
+
+  function buildImage() {
+    vpages.innerHTML = "";
+    var img = new Image();
+    img.className = "pimg";
+    img.alt = current.name;
+    img.style.width = Math.round((vscroll.clientWidth - 16) * zoom) + "px";
+    img.onload = function () { vmsg.textContent = ""; };
+    img.onerror = function () { fallbackMessage(current); };
+    img.src = fileUrl(current.file);
+    vpages.appendChild(img);
+  }
+
   function openViewer(f) {
     current = f;
     zoom = 1;
@@ -222,6 +251,7 @@
     viewer.hidden = false;
     document.body.style.overflow = "hidden";
     history.pushState({ v: 1 }, "");
+    if (isImage(f)) { buildImage(); return; }
     if (!window.pdfjsLib) { fallbackMessage(f); return; }
     pdfjsLib.getDocument(fileUrl(f.file)).promise.then(function (doc) {
       if (my !== token) return;
@@ -243,6 +273,7 @@
   }
 
   function build() {
+    if (current && isImage(current)) { buildImage(); return; }
     if (!pdfDoc) return;
     if (observer) observer.disconnect();
     vpages.innerHTML = "";
